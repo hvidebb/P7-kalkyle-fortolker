@@ -22,10 +22,10 @@ instance (a ~ String) => Show (SRProcess a) where
   show SRNil                     = "0"
   show (SRRecv c n ps@(SRPar _)) = c ++ "(" ++ n ++ ")" ++ "."
                                      ++ "(" ++ show ps ++ ")"
-  show (SRRecv c n process)      = c ++ "(" ++ n ++ ")" ++ "." ++ show process
-  show (SRLift c p ps@(SRPar _)) = c ++ "{" ++ show p ++ "}" ++ "."
+  show (SRRecv c n process)      = c ++ "(" ++ n ++ ")." ++ show process
+  show (SRLift c p ps@(SRPar _)) = c ++ "{" ++ show p ++ "}."
                                      ++ "(" ++ show ps ++ ")"
-  show (SRLift c p process)      = c ++ "{" ++ show p ++ "}" ++ "." ++ show process
+  show (SRLift c p process)      = c ++ "{" ++ show p ++ "}." ++ show process
   show (SRDrop n)                = "'" ++ n ++ "'"
   show (SRPar (p:[]))            = show p
   show (SRPar (p:ps))            = show p ++ " | " ++ show (SRPar ps)
