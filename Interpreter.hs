@@ -21,3 +21,5 @@ makeEnv p = SREnv $ [p]
 stepProcess :: Ord a => SREnv a -> (SREnv a, SREnv a)
 stepProcess (SREnv xs) = (SREnv ncoms, SREnv coms)
   where (ncoms, coms) = foldr (\v (al, ar) -> bool (al, v : ar) (v : al, ar) . isNothing . getChan $ v) ([], []) xs
+
+
