@@ -2,7 +2,9 @@ module Parser where
 import Text.Parsec.Char
 import Text.Parsec.Combinator
 import Text.Parsec.String
-import Text.Parsec
+import Text.Parsec hiding ((<|>))
+import Control.Applicative
+import Data.Function (on)
 
 import Process
 
@@ -38,7 +40,7 @@ macro :: Parser Process
 macro = Macro <$> many1 upper
 
 prefix :: Parser Process
-prefix = name >>= \n -> (recv n <|> lift n)
+prefix = name >>= \n -> recv n <|> lift n
   where recv n = Recv n <$> between (char '(') (char ')') name <*> next
         lift n = Lift n <$> between (char '{') (char '}') par
         next   = option [] $ char '.' >> process

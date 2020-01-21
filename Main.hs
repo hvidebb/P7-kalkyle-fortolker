@@ -16,7 +16,7 @@ main :: IO ()
 main = print "Hallo"
 
 testproc :: Program
-testproc = makeEnv . testParse $ "a(b).'b' | a{c(d).'d'}"
+testproc = makeProgram . testParse $ "a(b).'b' | c(d).'d'"
 
 test :: IO ()
 test = do
@@ -27,11 +27,6 @@ test = do
   putStrLn $ replicate 80 '-'
   IM.foldMapWithKey (curry print) . snd $ kripke
   return $ seq kripke $ ()
-
--- test :: IO ()
--- test = do
---   print "hej"
---   return ()
 
 printPrograms :: Maybe [Program] -> IO ()
 printPrograms (Just ps) = do
