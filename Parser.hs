@@ -1,46 +1,34 @@
-module Parser where
-import Text.Parsec.Char
-import Text.Parsec.Combinator
-import Text.Parsec.String
-import Text.Parsec hiding ((<|>))
+module Parser (parse) where
+import RhoProcess
+import ParserCompinators
+import Data.Char
 import Control.Applicative
+import Control.Monad
+
 import Data.Function (on)
 
-import Process
+parse :: String -> Maybe Process
+parse = fmap snd . runParser (parsePara <* eof)
 
-import Data.String
-import Data.Either
+parseName :: IsRhoName a => Parser a
+parseName = quote `flip` Nothing <$>
+            some (satisfy isLetter <|> satisfy (== '\''))
 
-testParse :: String -> [Process]
-testParse = either (error . show) id . parseProcess
+parsePara :: IsRhoName a => Parser (ProcessT a)
+parsePara = mconcat <$> sepMany (parseProcess <* spaces)
+                                  (charP '|' *> spaces)
 
-parseProcessM :: String -> Maybe [Process]
-parseProcessM = either (const Nothing) Just . parseProcess
+parseProcess :: IsRhoName a => Parser (ProcessT a)
+parseProcess = choice
+  [ ProcessT . return <$> parsePrefix
+  , charP '0' >> return mempty
+  , ProcessT . return . Drop <$> parseName
+  , ProcessT . return . Scope <$> between (stringP "[") (stringP "]") parsePara
+  , between (charP '(' <* spaces) (charP ')' <* spaces) parsePara
+  ]
 
-parseProcess :: String -> Either ParseError [Process]
-parseProcess = parse (par >>= \x -> eof >> return x) ""
-
-name :: Parser String
-name = many1 lower
-
-process :: Parser [Process]
-process = choice [ (:[]) <$> prefix, (:[]) <$> rdrop, (:[]) <$> macro,
-                   between (char '(') (char ')') par, nil ]
-
-par :: Parser [Process]
-par = concat <$> sepBy process (spaces >> char '|' >> spaces)
-
-nil :: Parser [Process]
-nil = char '0' >> spaces >> return []
-
-rdrop :: Parser Process
-rdrop = RDrop <$> between (char '\'') (char '\'') name
-
-macro :: Parser Process
-macro = Macro <$> many1 upper
-
-prefix :: Parser Process
-prefix = name >>= \n -> recv n <|> lift n
-  where recv n = Recv n <$> between (char '(') (char ')') name <*> next
-        lift n = Lift n <$> between (char '{') (char '}') par
-        next   = option [] $ char '.' >> process
+parsePrefix :: IsRhoName a => Parser (OperationT a)
+parsePrefix = parseName >>= \n -> recv n <|> lift n
+  where recv n = Recv n <$> between (stringP "(") (stringP ")") parseName
+                          <*> option mempty (charP '.' >> parseProcess)
+        lift n = Lift n <$> between (stringP "{") (stringP "}") parseProcess
