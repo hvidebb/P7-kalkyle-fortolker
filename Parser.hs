@@ -1,4 +1,4 @@
-module Parser (parse) where
+module Parser (parse, testparse, testparseName) where
 import RhoProcess
 import ParserCompinators
 import Data.Char
@@ -10,15 +10,25 @@ import Data.Function (on)
 parse :: String -> Maybe Process
 parse = fmap snd . runParser (parsePara <* eof)
 
-parseName :: IsRhoName a => Parser a
-parseName = quote `flip` Nothing <$>
+testparse :: String -> Process
+testparse s = case parse s of
+  Nothing -> error "Could not parse process"
+  Just p  -> p
+
+testparseName :: String -> Name
+testparseName s = case fmap snd $ (runParser (parseName <* eof) s) of
+  Nothing -> error "Could not parse name"
+  Just n  -> n
+
+parseName :: Parser Name
+parseName = Name `flip` Nothing <$>
             some (satisfy isLetter <|> satisfy (== '\''))
 
-parsePara :: IsRhoName a => Parser (ProcessT a)
+parsePara :: Parser Process
 parsePara = mconcat <$> sepMany (parseProcess <* spaces)
                                   (charP '|' *> spaces)
 
-parseProcess :: IsRhoName a => Parser (ProcessT a)
+parseProcess :: Parser Process
 parseProcess = choice
   [ ProcessT . return <$> parsePrefix
   , charP '0' >> return mempty
@@ -27,7 +37,7 @@ parseProcess = choice
   , between (charP '(' <* spaces) (charP ')' <* spaces) parsePara
   ]
 
-parsePrefix :: IsRhoName a => Parser (OperationT a)
+parsePrefix :: Parser Operation
 parsePrefix = parseName >>= \n -> recv n <|> lift n
   where recv n = Recv n <$> between (stringP "(") (stringP ")") parseName
                           <*> option mempty (charP '.' >> parseProcess)

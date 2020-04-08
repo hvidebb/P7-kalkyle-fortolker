@@ -1,8 +1,8 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE LambdaCase #-}
 module RhoProcess where
 import Data.List
+import Data.Bool
 
 -- {{{ Process
 type Process = ProcessT Name
@@ -35,7 +35,12 @@ data OperationT a = Recv  { getCha :: a,  getVal :: a,  getP :: ProcessT a }
                   | Lift  { getCha :: a,  getP :: ProcessT a }
                   | Drop  { getVal :: a }
                   | Scope { getP   :: ProcessT a }
-  deriving (Eq)
+
+instance Eq a => Eq (OperationT a) where
+  (Recv  c n p) == (Recv  c' n' p') = c == c' && (rn n p) == (rn n' p')
+  (Lift  c p)   == (Lift  c' p')    = c == c' && p == p'
+  (Drop  n)     == (Drop  n')       = n == n'
+  (Scope p)     == (Scope p')       = p == p'
 
 instance Functor OperationT where
   fmap f (Recv n c p)  = Recv (f n) (f c) (fmap f p)
@@ -50,59 +55,40 @@ instance Show a => Show (OperationT a) where
   show (Lift n p)    = show n ++ "{" ++ show p ++ "}"
   show (Drop n)      = show n
   show (Scope p)     = "[" ++ show p ++ "]"
+
+rn :: Eq a => a -> ProcessT a -> ProcessT (Maybe a)
+rn n = fmap (\n' -> bool (Just n') Nothing (n == n'))
+
 -- }}}
 -- {{{ Name
-class IsRhoName a where
-  drop  :: a -> Maybe (ProcessT a)
-  quote :: String -> Maybe (ProcessT a) -> a
-
 data Name = Name { getSymbol :: String, getQuoted :: Maybe Process }
-          | NRN
-
-instance IsRhoName Name where
-  drop = getQuoted
-  quote = Name 
 
 instance Eq Name where
   (Name _ (Just a)) == (Name _ (Just b)) = a  == b
   (Name s1 Nothing) == (Name s2 Nothing) = s1 == s2
-  NRN               == NRN               = True
   _                 == _                 = False
 
 instance Show Name where
-  show NRN = "Θ" 
   show x   = getSymbol x
 -- }}}
 -- {{{ Replaceable
-replace :: Eq a => ProcessT a -> a -> a -> ProcessT a
-replace p a b = fmap `flip` p $ \case
-  x | x == a    ->  b
-    | otherwise ->  x
--- }}}
--- {{{ Free Names
-class FreeNames a where
-  fn :: (IsRhoName b, Eq b) => a b -> [b]
-  bn :: (IsRhoName b, Eq b) => a b -> [b]
-  an :: (IsRhoName b, Eq b) => a b -> [b]
+infixr 9 \\\
+(\\\) :: Process -> (Name, Name) -> Process
+p \\\ (a, b) = replace a b p
 
-instance FreeNames ProcessT where
-  fn = nub . mconcat . map fn . toList
-  bn = nub . mconcat . map bn . toList 
-  an = nub . mconcat . map an . toList 
-
-instance FreeNames OperationT where
-  fn (Recv c n p) = [c] ++ (delete n . nub $ fn p)
-  fn (Lift c p)   = [c] ++ fn p
-  fn (Drop n)     = [n]
-  fn (Scope p)    = fn p
-
-  bn (Recv c n p) = [n] ++ bn p
-  bn (Lift c p)   = bn p
-  bn (Drop n)     = []
-  bn (Scope p)    = bn p
-
-  an (Recv c n p) = [c, n] ++ an p
-  an (Lift c p)   = [c] ++ an p
-  an (Drop n)     = [n]
-  an (Scope p)    = bn p
+replace :: Name -> Name -> Process -> Process
+replace ner ned = ProcessT . foldl replace' [] . toList
+  where replace' :: [Operation] -> Operation -> [Operation]
+        replace' acc = \case 
+          (Recv  c n p) -> 
+            (Recv (replaceN c) (replaceN n) (replace ner ned p)):acc
+          (Lift  c p)   -> (Lift (replaceN c) (replace ner ned p)):acc
+          (Drop  n)     | n == ned ->
+            case getQuoted ner of
+              Just p  -> acc ++ toList p
+              Nothing -> (Drop ner):acc
+                        | otherwise -> (Drop n):acc
+          (Scope p) -> (Scope $ replace ner ned p):acc
+        replaceN name | ned == name = ner
+                      | otherwise   = name
 -- }}}
